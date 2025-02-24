@@ -4012,6 +4012,7 @@ dependencies = [
  "cards",
  "chrono",
  "common_enums",
+ "common_types",
  "common_utils",
  "crypto",
  "encoding_rs",

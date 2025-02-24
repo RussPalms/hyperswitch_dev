@@ -18,6 +18,7 @@ use hyperswitch_domain_models::{
     types::PayoutsRouterData,
 };
 use hyperswitch_domain_models::{
+    network_tokenization::NetworkTokenNumber,
     payment_method_data::{
         ApplePayWalletData, GooglePayWalletData, NetworkTokenData, PaymentMethodData,
         SamsungPayWalletData, WalletData,
@@ -250,6 +251,11 @@ impl TryFrom<&SetupMandateRouterData> for CybersourceZeroMandateRequest {
                     )),
                     Some(PaymentSolution::GooglePay),
                 ),
+                WalletData::SamsungPay(samsung_pay_data) => (
+                    (get_samsung_pay_payment_information(&samsung_pay_data)
+                        .attach_printable("Failed to get samsung pay payment information")?),
+                    Some(PaymentSolution::SamsungPay),
+                ),
                 WalletData::AliPayQr(_)
                 | WalletData::AliPayRedirect(_)
                 | WalletData::AliPayHkRedirect(_)
@@ -431,7 +437,7 @@ pub struct CaptureOptions {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkTokenizedCard {
-    number: cards::CardNumber,
+    number: NetworkTokenNumber,
     expiration_month: Secret<String>,
     expiration_year: Secret<String>,
     cryptogram: Option<Secret<String>>,
@@ -1270,13 +1276,13 @@ impl
                     ucaf_collection_indicator: None,
                     cavv,
                     ucaf_authentication_data,
-                    xid: Some(authn_data.threeds_server_transaction_id.clone()),
+                    xid: authn_data.threeds_server_transaction_id.clone(),
                     directory_server_transaction_id: authn_data
                         .ds_trans_id
                         .clone()
                         .map(Secret::new),
                     specification_version: None,
-                    pa_specification_version: Some(authn_data.message_version.clone()),
+                    pa_specification_version: authn_data.message_version.clone(),
                     veres_enrolled: Some("Y".to_string()),
                 }
             });
@@ -1353,13 +1359,13 @@ impl
                     ucaf_collection_indicator: None,
                     cavv,
                     ucaf_authentication_data,
-                    xid: Some(authn_data.threeds_server_transaction_id.clone()),
+                    xid: authn_data.threeds_server_transaction_id.clone(),
                     directory_server_transaction_id: authn_data
                         .ds_trans_id
                         .clone()
                         .map(Secret::new),
                     specification_version: None,
-                    pa_specification_version: Some(authn_data.message_version.clone()),
+                    pa_specification_version: authn_data.message_version.clone(),
                     veres_enrolled: Some("Y".to_string()),
                 }
             });
@@ -1401,10 +1407,10 @@ impl
         let payment_information =
             PaymentInformation::NetworkToken(Box::new(NetworkTokenPaymentInformation {
                 tokenized_card: NetworkTokenizedCard {
-                    number: token_data.token_number,
-                    expiration_month: token_data.token_exp_month,
-                    expiration_year: token_data.token_exp_year,
-                    cryptogram: token_data.token_cryptogram.clone(),
+                    number: token_data.get_network_token(),
+                    expiration_month: token_data.get_network_token_expiry_month(),
+                    expiration_year: token_data.get_network_token_expiry_year(),
+                    cryptogram: token_data.get_cryptogram().clone(),
                     transaction_type: "1".to_string(),
                 },
             }));
@@ -1434,13 +1440,13 @@ impl
                     ucaf_collection_indicator: None,
                     cavv,
                     ucaf_authentication_data,
-                    xid: Some(authn_data.threeds_server_transaction_id.clone()),
+                    xid: authn_data.threeds_server_transaction_id.clone(),
                     directory_server_transaction_id: authn_data
                         .ds_trans_id
                         .clone()
                         .map(Secret::new),
                     specification_version: None,
-                    pa_specification_version: Some(authn_data.message_version.clone()),
+                    pa_specification_version: authn_data.message_version.clone(),
                     veres_enrolled: Some("Y".to_string()),
                 }
             });
@@ -1859,25 +1865,8 @@ impl
         let bill_to = build_bill_to(item.router_data.get_optional_billing(), email)?;
         let order_information = OrderInformationWithBill::from((item, Some(bill_to)));
 
-        let samsung_pay_fluid_data_value =
-            get_samsung_pay_fluid_data_value(&samsung_pay_data.payment_credential.token_data)?;
-
-        let samsung_pay_fluid_data_str = serde_json::to_string(&samsung_pay_fluid_data_value)
-            .change_context(errors::ConnectorError::RequestEncodingFailed)
-            .attach_printable("Failed to serialize samsung pay fluid data")?;
-
-        let payment_information =
-            PaymentInformation::SamsungPay(Box::new(SamsungPayPaymentInformation {
-                fluid_data: FluidData {
-                    value: Secret::new(consts::BASE64_ENGINE.encode(samsung_pay_fluid_data_str)),
-                    descriptor: Some(
-                        consts::BASE64_ENGINE.encode(FLUID_DATA_DESCRIPTOR_FOR_SAMSUNG_PAY),
-                    ),
-                },
-                tokenized_card: SamsungPayTokenizedCard {
-                    transaction_type: TransactionType::SamsungPay,
-                },
-            }));
+        let payment_information = get_samsung_pay_payment_information(&samsung_pay_data)
+            .attach_printable("Failed to get samsung pay payment information")?;
 
         let processing_information = ProcessingInformation::try_from((
             item,
@@ -1901,6 +1890,32 @@ impl
             merchant_defined_information,
         })
     }
+}
+
+fn get_samsung_pay_payment_information(
+    samsung_pay_data: &SamsungPayWalletData,
+) -> Result<PaymentInformation, error_stack::Report<errors::ConnectorError>> {
+    let samsung_pay_fluid_data_value =
+        get_samsung_pay_fluid_data_value(&samsung_pay_data.payment_credential.token_data)?;
+
+    let samsung_pay_fluid_data_str = serde_json::to_string(&samsung_pay_fluid_data_value)
+        .change_context(errors::ConnectorError::RequestEncodingFailed)
+        .attach_printable("Failed to serialize samsung pay fluid data")?;
+
+    let payment_information =
+        PaymentInformation::SamsungPay(Box::new(SamsungPayPaymentInformation {
+            fluid_data: FluidData {
+                value: Secret::new(consts::BASE64_ENGINE.encode(samsung_pay_fluid_data_str)),
+                descriptor: Some(
+                    consts::BASE64_ENGINE.encode(FLUID_DATA_DESCRIPTOR_FOR_SAMSUNG_PAY),
+                ),
+            },
+            tokenized_card: SamsungPayTokenizedCard {
+                transaction_type: TransactionType::SamsungPay,
+            },
+        }));
+
+    Ok(payment_information)
 }
 
 fn get_samsung_pay_fluid_data_value(

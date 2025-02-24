@@ -11,6 +11,7 @@ pub mod mandates;
 pub mod merchant_account;
 pub mod merchant_connector_account;
 pub mod merchant_key_store;
+pub mod network_tokenization;
 pub mod payment_address;
 pub mod payment_method_data;
 pub mod payment_methods;
@@ -19,6 +20,8 @@ pub mod payments;
 pub mod payouts;
 pub mod refunds;
 pub mod relay;
+#[cfg(all(feature = "v2", feature = "revenue_recovery"))]
+pub mod revenue_recovery;
 pub mod router_data;
 pub mod router_data_v2;
 pub mod router_flow_types;
@@ -403,6 +406,8 @@ impl ApiModelToDieselModelConvertor<api_models::admin::PaymentLinkConfigRequest>
                 )
             }),
             payment_button_text: item.payment_button_text,
+            custom_message_for_card_terms: item.custom_message_for_card_terms,
+            payment_button_colour: item.payment_button_colour,
         }
     }
     fn convert_back(self) -> api_models::admin::PaymentLinkConfigRequest {
@@ -419,6 +424,8 @@ impl ApiModelToDieselModelConvertor<api_models::admin::PaymentLinkConfigRequest>
             background_image,
             details_layout,
             payment_button_text,
+            custom_message_for_card_terms,
+            payment_button_colour,
         } = self;
         api_models::admin::PaymentLinkConfigRequest {
             theme,
@@ -439,6 +446,8 @@ impl ApiModelToDieselModelConvertor<api_models::admin::PaymentLinkConfigRequest>
             background_image: background_image
                 .map(|background_image| background_image.convert_back()),
             payment_button_text,
+            custom_message_for_card_terms,
+            payment_button_colour,
         }
     }
 }
