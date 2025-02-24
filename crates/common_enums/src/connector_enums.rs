@@ -85,6 +85,7 @@ pub enum RoutableConnectors {
     Globalpay,
     Globepay,
     Gocardless,
+    // Hipay,
     Helcim,
     Iatapay,
     Inespay,
@@ -225,6 +226,7 @@ pub enum Connector {
     Globepay,
     Gocardless,
     Gpayments,
+    // Hipay,
     Helcim,
     Inespay,
     Iatapay,
@@ -377,6 +379,7 @@ impl Connector {
             | Self::Globepay
             | Self::Gocardless
             | Self::Gpayments
+            // | Self::Hipay
             | Self::Helcim
             | Self::Iatapay
 			| Self::Inespay
